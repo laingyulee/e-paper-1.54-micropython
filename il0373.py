@@ -270,7 +270,9 @@ class IL0373(): # Rename from SSD1680 to IL0373 for clarity
         self.res = res
         
         self.screen = Screen(width=width, height=height)
-        self.paint = Paint(self.screen, rotate=rotate, bg_color=bg_color) 
+        self.paint = Paint(self.screen, rotate=rotate, bg_color=bg_color)
+        
+        self.is_sleeping = True # <<< 新增：跟踪墨水屏的休眠状态
         
         self.cs(1) # CS pin needs to be high by default if not actively selected
         
@@ -280,7 +282,7 @@ class IL0373(): # Rename from SSD1680 to IL0373 for clarity
     def chip_desel(self):
         self.cs(1)
         
-    def read_busy(self, info="wait busy timeout!", timeout=10):
+    def read_busy(self, info="wait busy timeout!", timeout=30):
         st = time.time()
         # 直接移除 GPIO 编号的打印
         print(f"Waiting for BUSY pin to go HIGH (idle)...")
@@ -419,8 +421,14 @@ class IL0373(): # Rename from SSD1680 to IL0373 for clarity
         self._sleep() # Arduino driver puts to sleep after update
         
     def update(self):
+        if self.is_sleeping:
+            print("Waking up EPD for update...")
+            self._wakeUp() # 这会把 self.is_sleeping 设置为 False
+        
+        print("updating the memory...")
         self.update_mem()
-        self.update_screen()
+        print("updating memory successful")
+        self.update_screen() # 这会调用 _sleep() 并把 self.is_sleeping 设置为 True
         
     # --- Passthrough methods (remain the same) ---
     def clear(self, *args, **kwargs):
@@ -454,14 +462,14 @@ class IL0373(): # Rename from SSD1680 to IL0373 for clarity
 if __name__ == "__main__": # test block
     # --- ESP32-S3 Pin Definitions (ADJUST AS NEEDED) ---
     spi_id = 1      # Use SPI controller 1 (HSPI)
-    sck_pin = 18    # SPI SCK (Clock) - Example GPIO
-    mosi_pin = 23   # SPI MOSI (Data Out) - Example GPIO
+    sck_pin = 13    # SPI SCK (Clock) - Example GPIO
+    mosi_pin = 12   # SPI MOSI (Data Out) - Example GPIO
     miso_pin = 19   # SPI MISO (Data In) - Example GPIO (EPD typically doesn't use MISO)
 
-    busy_pin = 13   # BUSY pin (Input) - Example GPIO
-    reset_pin = 15  # RESET pin (Output) - Example GPIO
-    dc_pin = 14     # Data/Command pin (Output) - Example GPIO
-    cs_pin = 5      # Chip Select pin (Output) - Example GPIO
+    busy_pin = 8   # BUSY pin (Input) - Example GPIO
+    reset_pin = 11  # RESET pin (Output) - Example GPIO
+    dc_pin = 10     # Data/Command pin (Output) - Example GPIO
+    cs_pin = 9      # Chip Select pin (Output) - Example GPIO
 
     spi_epd = SPI(
         spi_id,
@@ -497,7 +505,7 @@ if __name__ == "__main__": # test block
     epd.draw_rectangle(0, 0, 151, 151, Color.BLACK)
     epd.draw_line(0, 75, 151, 75, Color.BLACK)
     epd.draw_line(75, 0, 75, 151, Color.BLACK)
-    epd.draw_rectangle(10, 10, 40, 40, Color.BLACK, filled=True)
+    epd.draw_rectangle(120, 10, 150, 40, Color.BLACK, filled=True)
     epd.draw_circle(75, 75, 30, Color.BLACK)
     epd.draw_circle(75, 75, 15, Color.BLACK, filled=True)
 
@@ -520,9 +528,9 @@ if __name__ == "__main__": # test block
     time.sleep(5)
     
     epd.clear(Color.WHITE)
-    epd.show_string("Cleared!", 20, 60, multiplier=3, color=Color.BLACK)
+    epd.show_string("Screen", 30, 60, multiplier=2, color=Color.BLACK)
+    epd.show_string("Cleared.", 30, 80, multiplier=2, color=Color.BLACK)
     epd.update()
-    time.sleep(2)
     
     # After update, the _sleep() is called automatically as per Arduino driver
     # If you want to explicitly deep sleep again:
